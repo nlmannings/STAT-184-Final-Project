@@ -86,10 +86,10 @@ library(readr)
 library(tidyverse)
 
 # Load all of the data into memory
-Demographics <- readr::read_csv("./Data/Demographics.csv")
-TestScores <- readr::read_csv("./Data/Cognition.csv")
-MRI_Data <- readr::read_csv("./Data/ADNI.csv")
-Metabolic_Data <- readr::read_csv("./Data/FDG.csv")
+Demographics <- readr::read_csv("./Demographics.csv")
+TestScores <- readr::read_csv("./Cognition.csv")
+MRI_Data <- readr::read_csv("./ADNI.csv")
+Metabolic_Data <- readr::read_csv("./FDG.csv")
 
 # Peek at each of the loaded data frames
 head(Demographics)
