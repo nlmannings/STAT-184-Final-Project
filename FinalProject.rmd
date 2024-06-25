@@ -1,0 +1,217 @@
+---
+title: "Final Project"
+author: "Nathan Mannings"
+date: "June 24th, 2024"
+output: 
+    html_notebook
+---
+
+
+
+
+In this project we will be using data provided by the Harvard Aging Brain Study (HABS) to answer the following research question:
+
+# How does the size of the hippocampus change with age?
+
+### Origin of the Data
+The Harvard Aging Brain Study (HABS) is a longitudinal study designed to investigate the changes in brain structure and function that occur with aging and the transition from normal cognitive aging to Alzheimer's disease (AD).
+
+The primary goals of the HABS are:
+
+- To understand the mechanisms underlying healthy brain aging and the early stages of Alzheimer's disease.
+- To identify biomarkers for early detection and progression of Alzheimer's disease.
+- To study the effects of aging on brain structure, function, and cognition.
+
+### Who/What/When/Where/Why/How of the Data Collection:
+
+Who: Participants include older adults, both with and without cognitive impairments, recruited from the general community.
+
+What: Data includes neuroimaging (MRI, FDG-PET), cognitive test scores, clinical measures, and demographic information.
+
+When: The study is ongoing, with data collected at multiple time points (baseline, follow-up visits).
+
+Where: The study is conducted at various research centers affiliated with Harvard University.
+
+Why: To gain insights into the aging process and identify early indicators of Alzheimer's disease.
+
+How: Data is collected through standardized protocols for imaging, cognitive testing, and clinical assessments.
+
+
+# Data Included From the Study and their variables
+
+"__Demographics.csv__"
+
+- SubjIDshort: Subject ID (shortened version)
+- Sex: Sex of the subject
+- Birthdate: Birthdate of the subject
+- Race: Race of the subject
+- Ethnicity: Ethnicity of the subject
+- Education: Education level of the subject
+- Handedness: Handedness of the subject (left or right-handed)
+
+"__Cognition.csv__"
+
+- SubjIDshort: Subject ID (shortened version)
+- CogTestID: Cognitive test identifier
+- CogTestDate: Date the cognitive test was administered
+- CogTestName: Name of the cognitive test
+- CogTestScore: Score obtained in the cognitive test
+- CogTestNorm: Normalized cognitive test score (if applicable)
+
+__"ADNI.csv"__ (ADNI stands for "Alzheimers Disease Neuroimaging Initative" )
+
+- SubjIDshort: Subject ID (shortened version)
+- StudyArc: Study phase or arc
+- MRI_SessionDate: Date of the MRI session
+- MRI_Age: Age of the subject at the time of MRI
+- MRI_FS6_ADNI_*_thk: Thickness measurements of various brain regions using FreeSurfer (version 6) as part of the ADNI protocol
+- MRI_FS6_ADNI_*_vol: Volume measurements of various brain regions using FreeSurfer (version 6) as part of the ADNI protocol
+- MRI_FS6_ADNI_*_area: Surface area measurements of various brain regions using FreeSurfer (version 6) as part of the ADNI protocol
+- MRI_FS6_ADNI_ICV_vol: Intracranial volume measurement
+
+__"FDG.csv"__ (FDG stands for "Fluorodeoxyglucose" which is a chemical that is used to assist the imaging process during PET Scans)
+
+- SubjIDshort: Subject ID (shortened version)
+- StudyArc: Study phase or arc
+- FDG_SessionDate: Date of the FDG-PET scan
+- FDG_Age: Age of the subject at the time of the FDG-PET scan
+- FDG_FS_SUVR_*_lh/rh/bh: Standardized Uptake Value Ratios (SUVR) in various brain regions measured by FDG-PET. The suffixes _lh, _rh, and _bh indicate left hemisphere, right hemisphere, and both hemispheres, respectively
+
+# Inspecting the data
+
+Lets load the data into our session and peek at the first few rows of each imported data frame.
+
+```{r}
+library(readr)
+library(tidyverse)
+
+# Load all of the data into memory
+Demographics <- readr::read_csv("./Data/Demographics.csv")
+TestScores <- readr::read_csv("./Data/Cognition.csv")
+MRI_Data <- readr::read_csv("./Data/ADNI.csv")
+Metabolic_Data <- readr::read_csv("./Data/FDG.csv")
+
+# Peek at each of the loaded data frames
+head(Demographics)
+head(TestScores)
+head(Metabolic_Data)
+head(MRI_Data)
+```
+
+Before moving onto the main question of our analysis study can consider some basic questions such as:
+- How many people enrolled in this study?
+- How are the ages of those who participated distributed?
+- Did more men particpate than women?
+
+
+Let's try answering the first and second questions by leveraging the "Demographics" data frame. It's important to note that this data comes from a longitudinal study, and some of the research subjects did not consistently follow up with their yearly check-ins. This means that we will have to ignore those cases were not recorded during the initial data intake of the study. We will only analyse the cases collected in the beginning so that no extra data skews our results. We will plot the distribution using a histogram from ggplot.
+
+
+```{r}
+
+# Filter out the cases from later points in the study
+Initial_Data <- Demographics %>% filter(StudyArc == "HAB_1.0")
+
+# Count the number of people who enrolled in the study.
+Initial_Data %>% summarise(Subjects = n())
+
+# Plot the age distribution using ggplot
+ggplot(Initial_Data) +
+aes(x = NP_Age) +
+xlab("Age") +
+geom_histogram(bins = 30L, fill = "#112446") +
+theme_minimal()
+```
+
+Here we can see that there were a total of 290 research subjects who initially enrolled as part of the Harvard Aging Brain Study, and their ages follow a distriibution that is somewhat skewed
+
+Now let's attempt to answer our main reserach question.
+
+# Answering the main research question
+
+From the ADNI.csv file, it is obvious that there are several measurements taken of the hippocampus, two of which are relevant to answering our main question. To answer the question, we ca plot the research subjects' age against the size of their hippocampi and including a line of best fit to see if there is a general tend in the data. There are also some measurements related to glucose uptake (i.e. energy consumption) of each brain region from the FDG.csv file we imported earlier. This means we can gather additional insights during our research by including data not only about the size, but also the energy consumption of the hippocampus, and perhaps how those two measurements are correlated. I predict that the smaller hippocampi will consume less energy. Lets have a look and see for ourselves.
+
+## Wrangling the Data
+
+Many of the variable names in the files we are interested in contain prefixes that are unecessary for the purpose of this analysis. Let's strip the unnecessary variables from the data, only keeping those that are relevant to what we want to study. 
+
+```{r}
+# Adjust the variable names using regular expressions
+colnames(MRI_Data) <- gsub("^MRI_FS6_ADNI_", "", colnames(MRI_Data))
+
+# Do the same for the FDG data set
+colnames(Metabolic_Data) <- gsub("^FDG_FS_SUVR_", "", colnames(Metabolic_Data))
+```
+
+
+Now we can create a new dataframe with only the necessary variables from the MRI Data that we need to answer our research question:
+```{r}
+MRI_Simple <- MRI_Data %>% select(SubjIDshort, StudyArc, MRI_Age, Left_Hippocampus_vol, Right_Hippocampus_vol)
+
+Metabolic_Simple <- Metabolic_Data  %>% select(SubjIDshort, StudyArc, Hippocampus_lh, Hippocampus_rh) 
+
+# Lets also change the "MRI_Age" column to have a simpler name
+MRI_Simple <- MRI_Simple  %>% rename(Age = MRI_Age)
+
+```
+
+It's important to keep in mind that in one of the diagrams, I want to keep the data measured from one hemisphere of the brain separate from data measured in the other hemisphere. This can be done using facets, however first the data must be wrangled to do this because the measurements for the left and right hemispheres of each individual are stored in separate variables.
+
+This is where the pivot_longer() function would come in handy, however, the amount of wrangling necessary to use the function for both is more than it would take to just do it manually, so we just do it manually instead.
+
+*NOTE:* Since we will also be looking at the energy consumption with respect to each hemisphere, we will need to include data from the FDG data set in our wranglig process as well. We will acheive this using an inner_join().
+
+```{r}
+# Join the data that represents hippocampal activity with hippocampal size
+Combined_Data <- inner_join(MRI_Simple, Metabolic_Simple, by = c("SubjIDshort" = "SubjIDshort", "StudyArc" = "StudyArc") )
+
+# Give the variables a more descriptive name
+Combined_Data <- Combined_Data %>% rename(Left_Hippocampus_activity = Hippocampus_lh, Right_Hippocampus_activity = Hippocampus_rh)
+
+# Now we want to separate the data into separate frames for each hemisphere of the brain.
+
+# Left Hemisphere
+Combined_left <- Combined_Data %>% select(SubjIDshort, StudyArc, Age, Left_Hippocampus_vol, Left_Hippocampus_activity)
+
+#  Right Hemishpere
+Combined_right <- Combined_Data %>%  select(SubjIDshort, StudyArc, Age, Right_Hippocampus_vol, Right_Hippocampus_activity)  
+
+# More cleaning
+Combined_left <- Combined_left %>% rename(vol = Left_Hippocampus_vol, activity = Left_Hippocampus_activity) 
+Combined_right <- Combined_right %>% rename(vol = Right_Hippocampus_vol, activity = Right_Hippocampus_activity) 
+
+# Now we add a varaible that will be necessary to differentiate the data recorded in the left hemisphere from the data reforded in the right hemisphere in the dataframe where both are combined:
+Combined_left <- Combined_left %>% mutate(Hemisphere = "Left")
+Combined_right <- Combined_right %>% mutate(Hemisphere = "Right")
+
+# Concatenate the data from each hemishpere into one data frame and assign it to the existing "Combined_Data" reference
+Combined_Data <- rbind(Combined_left, Combined_right)    
+```
+
+Now we can visualize the data using ggplot to see if in fact age does correlate to hippocampal volume.
+
+```{r}
+ggplot(Combined_Data) +
+  aes(x = Age, y = vol) +
+  geom_point(shape = "circle", size = 1.5, colour = "#112446") +
+  theme_minimal() +
+  facet_wrap(vars(Hemisphere)) +
+  geom_smooth(method = "lm", color = "green")
+  
+```
+
+I also want to see if theres a conection between the size of a hippocampus and its energy consumption. We have already wrangled the data into its necessary form for this, so all we must do is simply plot the data against one another as such:
+
+
+```{r}
+ggplot(Combined_Data) +
+  aes(x = vol, y = activity) +
+  geom_point(shape = "circle", size = 1.5, colour = "#112446") +
+  theme_minimal() +
+  geom_smooth(method = "lm", color = "red")
+```
+# Concluding Remarks
+
+In analyzing the correlation between research subjects' age and their brain volume (of their hippocampus) we have seen that age does in fact correlate to hippocampal volume. This could be because some of the research subject measurements have Alzheimer's which was one of the main focuses of this study and is known to affect the hippocampus. This could also be due to a multitude of other confounding variables that are connected to such measurements.
+
+After analyzing the correlation between brain volume and activity in a specific region, It seems like my initial hypothesis about the two variables being correlated was in fact wrong. In fact, it seems like the opposite may be true, as there is very tiny upward trend in the data suggesting that the two variables are slightly correlated. It is important to note the thickness of the error bars towards the ends, too.
